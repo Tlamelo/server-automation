@@ -1,0 +1,8 @@
+Goal: automate logging into servers
+
+Task: Allow predefined aliases in the args Eg ./server_automation.py --server .29
+      Allow running custom commands in the args Eg ./server_automation.py --server .29 --command "ls -al"
+      Remove u'' from the string being presented to the user
+      Add list command on connect argument
+      Add the --command argument to run a command
+      Auto complete in typing the commands in cli
