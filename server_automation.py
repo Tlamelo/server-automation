@@ -1,23 +1,39 @@
-#!/usr/bin/env python
-import json
-import pexpect
-import sys
+#!/usr/bin/env python3
+import hjson, fcntl, shutil, signal, sys, pexpect
 
 # Define the constant to hold the special string that will be used as
 # the delimiter when splitting the arguments from the command line
+import struct
+
+import termios
+
 DELIMITER = "<------->"
 
 # Commands that will be used through the command line
 CONNECT = 'connect'
-CREATE = 'create'
+LIST = 'list'
 
 # Accepted commands
-ACCEPTED_COMMANDS = (CONNECT, CREATE)
+ACCEPTED_COMMANDS = {
+    CONNECT: """
+        Connects to a given server using the alias provided.
+        Example ./server_automation connect saved_alias
+        """,
+    LIST: """
+        Provides a list of aliases. An alias is how you identify 
+        the server that you have configured.
+        Example ./server_automation list
+        """}
+
+CONFIG_FILE = 'config_live.hjson'
 
 
-def log(result, other=""):
+def log(result, other=None):
     """Logging the results into the console"""
-    print(result + str(other))
+    if other is None:
+        print(result)
+    else:
+        print(result, other)
 
 
 def expected(child, expected_string):
@@ -91,43 +107,53 @@ def get_server_details(server_alias):
     :return: server details
     """
     found_alias = False
-    aliases = []
+    saved_aliases = []
     server = None
 
-    with open('config.json', 'r') as file:
-        config = json.load(file)
+    with open(CONFIG_FILE, 'r') as file:
+        config = hjson.load(file)
 
     # Get the username and password
-    for server in config['servers']:
-        aliases.extend(server['aliases'])
+    for server_item in config['servers']:
+        saved_aliases.extend(server_item['aliases'])
 
-        if server_alias in server['aliases']:
+        if server_alias in server_item['aliases']:
             found_alias = True
-            server = server
+            server = server_item
             break
 
     if found_alias is False:
-        log("No such alias exists. Current aliases are: ", str(aliases))
+        log('No such alias exists. Get the available aliases using: '
+            ' ./server_automation.py list')
+
         sys.exit(1)
 
     return server
 
 
+def sigwinch_pass_through():
+    s = struct.pack("HHHH", 0, 0, 0, 0)
+    a = struct.unpack('hhhh',
+                      fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, s))
+    global controller
+    controller.setwinsize(a[0], a[1])
+
+
 def server_login(server_details, app_controller=None):
     """
     Logs into the server specified and any required servers
-    :param server_details: 
-    :param app_controller: 
-    :return: 
     """
     if 'requiredServerLogIn' in server_details:
         # Connect to the server
         app_controller = server_login(get_server_details(server_details['requiredServerLogIn']), app_controller)
 
     # Connect to the server
-    app_controller = ssh_log_in(server_details['server'], server_details['username'],
-                                server_details['password'], server_details['serverDisplayName'],
-                                server_details['port'], app_controller)
+    app_controller = ssh_log_in(server_details['server'],
+                                server_details['username'],
+                                server_details['password'],
+                                server_details['serverDisplayName'],
+                                server_details['port'],
+                                app_controller)
 
     return app_controller
 
@@ -138,15 +164,19 @@ if __name__ == '__main__':
     try:
         assert len(args) >= 1
     except AssertionError:
-        log('Supported commands are {}'.format(str(ACCEPTED_COMMANDS)))
+        log('Supported commands are: \n{}'.format("\n".join(
+            ["{0}: {1}".format(key, value) for key, value in ACCEPTED_COMMANDS.items()])))
+
         sys.exit(1)
 
     # Save the first arg
     first_arg = args[0]
 
     # Check if the fist argument is a supported command
-    if first_arg not in ACCEPTED_COMMANDS:
-        log('Supported commands are {}'.format(str(ACCEPTED_COMMANDS)))
+    if first_arg not in ACCEPTED_COMMANDS.keys():
+        log('Supported commands are: \n{}'.format("\n".join(
+            ["{0}: {1}".format(key, value) for key, value in ACCEPTED_COMMANDS.items()])))
+
         sys.exit(1)
 
     # Handle each command
@@ -160,14 +190,46 @@ if __name__ == '__main__':
             sys.exit(1)
 
         alias = args[1]
-        server_details = get_server_details(alias)
+        details = get_server_details(alias)
 
-        controller = server_login(server_details)
+        controller = server_login(details)
 
+        # Get the window size and update the app controller
+        column, row = shutil.get_terminal_size((80, 20))
+        controller.setwinsize(row, column)
+
+        # Notify incase of a window size change
+        signal.signal(signal.SIGWINCH, sigwinch_pass_through)
         controller.interact()
 
-    elif first_arg == CREATE:
-        pass
+    elif first_arg == LIST:
+        # Get the list of all aliases
+        all_aliases = []
+
+        with open(CONFIG_FILE, 'r') as f:
+            data = hjson.load(f)
+
+            try:
+                assert len(args) >= 1
+            except AssertionError:
+                log('Config file:{config} does not exist or is empty.'
+                    .format(config=CONFIG_FILE))
+
+        for item in data['servers']:
+            all_aliases.append({
+                "server": item['server'],
+                "aliases": item['aliases']})
+
+        log("The list of aliases/servers are: ")
+        for item in all_aliases:
+            log("Aliases: {aliases} \n\t Server: {server}"
+                .format(server=item['server'],
+                        aliases=", ".join(item['aliases'])))
+
+        sys.exit(0)
     else:
-        log('Unimplemented command'.format(first_arg, str(ACCEPTED_COMMANDS)))
-        sys.exit(1)
+        log('Unimplemented command {command} {accepted_commands}'.format(
+            command=first_arg,
+            accepted_commands=str(ACCEPTED_COMMANDS.keys())))
+
+        sys.exit(0)
