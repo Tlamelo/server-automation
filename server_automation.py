@@ -25,7 +25,7 @@ ACCEPTED_COMMANDS = {
         Example ./server_automation list
         """}
 
-CONFIG_FILE = 'config_live.hjson'
+CONFIG_FILE = 'config.hjson'
 
 
 def log(result, other=None):
@@ -131,7 +131,7 @@ def get_server_details(server_alias):
     return server
 
 
-def sigwinch_pass_through():
+def sigwinch_pass_through(sig, data):
     s = struct.pack("HHHH", 0, 0, 0, 0)
     a = struct.unpack('hhhh',
                       fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, s))
@@ -220,7 +220,7 @@ if __name__ == '__main__':
                 "server": item['server'],
                 "aliases": item['aliases']})
 
-        log("The list of aliases/servers are: ")
+        log("The list of aliases/servers are: \n")
         for item in all_aliases:
             log("Aliases: {aliases} \n\t Server: {server}"
                 .format(server=item['server'],

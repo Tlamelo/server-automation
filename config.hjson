@@ -1,0 +1,25 @@
+{
+  "servers": [
+    {
+      // The list of aliases that will be used to
+      // log into the server.
+      // Example is: ./server_automation connect rebex
+      "aliases": ["rebex", "test.rebex.net"],
+      // The server address you are trying to log into
+      "server": "test.rebex.net",
+      // Server username
+      "username": "demo",
+      // Server password
+      "password": "password",
+      // Server port. 22 is the default port used in ssh
+      "port": 22,
+      // The server name indicated once you have
+      // logged into a server
+      // Example demo@test.rebex.net:/$
+      //    test.rebex.net is the server display name
+      "serverDisplayName": "test.rebex.net",
+      // The proxy server that you need to have logged into
+//    "requiredServerLogIn": "other.server.net"
+    }
+  ]
+}
